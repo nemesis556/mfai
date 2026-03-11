@@ -1,54 +1,119 @@
 @import "tailwindcss";
 
 @theme {
-  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
-  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+  --font-sans: "Rajdhani", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "Share Tech Mono", ui-monospace, SFMono-Regular, monospace;
 }
 
-@layer base {
-  :root {
-    --bg: #f8fafc;
-    --card: #ffffff;
-    --text: #0f172a;
-    --border: #e2e8f0;
-    --accent: #6366f1;
-    --muted: #64748b;
-  }
-
-  .dark {
-    --bg: #020617;
-    --card: #0f172a;
-    --text: #f8fafc;
-    --border: #1e293b;
-    --accent: #818cf8;
-    --muted: #94a3b8;
-  }
-
-  body {
-    @apply transition-colors duration-300;
-    background-color: var(--bg);
-    color: var(--text);
-    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
-  }
+:root {
+  --bg: #020810;
+  --surface: #050f1e;
+  --surface2: #091828;
+  --border: #0d2a45;
+  --accent: #00d4ff;
+  --accent2: #00ff88;
+  --warn: #ffaa00;
+  --danger: #ff3355;
+  --text: #c8e6ff;
+  --muted: #4a7a99;
+  --glow: 0 0 20px rgba(0, 212, 255, 0.3);
+  --glow-red: 0 0 20px rgba(255, 51, 85, 0.4);
 }
 
-.recharts-cartesian-grid-horizontal line,
-.recharts-cartesian-grid-vertical line {
-  stroke: var(--border);
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-sans);
+  min-height: 100vh;
+  overflow-x: hidden;
+  position: relative;
 }
 
-.recharts-default-tooltip {
-  background-color: var(--card) !important;
-  border: 1px solid var(--border) !important;
-  @apply !shadow-2xl !rounded-2xl !p-4;
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background-image: linear-gradient(rgba(0, 212, 255, 0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0, 212, 255, 0.03) 1px, transparent 1px);
+  background-size: 40px 40px;
 }
 
-.recharts-tooltip-label {
-  color: var(--muted) !important;
-  @apply !text-[10px] !font-black !uppercase !mb-2 !tracking-widest;
+body::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background: repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0, 0, 0, 0.03) 2px, rgba(0, 0, 0, 0.03) 4px);
+  animation: scanlines 8s linear infinite;
 }
 
-.recharts-tooltip-item {
-  color: var(--text) !important;
-  @apply !text-sm !font-bold !p-0;
+@keyframes scanlines {
+  0% { background-position: 0 0; }
+  100% { background-position: 0 100px; }
+}
+
+.glass {
+  background: rgba(5, 15, 30, 0.9);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border: 1px solid var(--border);
+}
+
+.glow-accent {
+  box-shadow: var(--glow);
+}
+
+.glow-danger {
+  box-shadow: var(--glow-red);
+}
+
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.3; }
+}
+
+.animate-blink {
+  animation: blink 2s ease-in-out infinite;
+}
+
+@keyframes pulse-border {
+  0%, 100% { box-shadow: 0 0 10px rgba(0, 212, 255, 0.3); }
+  50% { box-shadow: 0 0 25px rgba(0, 212, 255, 0.7); }
+}
+
+.animate-pulse-border {
+  animation: pulse-border 3s ease-in-out infinite;
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 4px;
+  height: 4px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 2px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--muted);
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: none; }
+}
+
+.fade-in {
+  animation: fadeIn 0.4s ease forwards;
+}
+
+/* Chart.js overrides */
+canvas {
+  max-width: 100%;
 }

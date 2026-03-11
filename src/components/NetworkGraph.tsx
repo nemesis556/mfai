@@ -5,9 +5,18 @@ import { NetworkData } from '../services/networkAnalysis';
 interface NetworkGraphProps {
   data: NetworkData;
   centrality?: Record<string, number>;
+  onNodeClick?: (id: string) => void;
 }
 
-export const NetworkGraph: React.FC<NetworkGraphProps> = ({ data, centrality }) => {
+const NODE_COLOR = {
+  server: '#00d4ff',
+  router: '#00ff88',
+  switch: '#ffaa00',
+  client: '#aa88ff',
+  database: '#ff6688'
+};
+
+export const NetworkGraph: React.FC<NetworkGraphProps> = ({ data, centrality, onNodeClick }) => {
   const svgRef = useRef<SVGSVGElement>(null);
 
   useEffect(() => {
@@ -19,49 +28,80 @@ export const NetworkGraph: React.FC<NetworkGraphProps> = ({ data, centrality }) 
     const svg = d3.select(svgRef.current);
     svg.selectAll('*').remove();
 
+    const g = svg.append('g');
+    
+    // Add zoom support
+    svg.call(d3.zoom<SVGSVGElement, any>()
+      .scaleExtent([0.3, 3])
+      .on('zoom', (event) => {
+        g.attr('transform', event.transform);
+      }));
+
     const nodes = data.nodes.map(d => ({ ...d }));
     const edges = data.edges.map(d => ({ ...d }));
 
     const simulation = d3.forceSimulation(nodes as any)
       .force('link', d3.forceLink(edges).id((d: any) => d.id).distance(100))
       .force('charge', d3.forceManyBody().strength(-300))
-      .force('center', d3.forceCenter(width / 2, height / 2));
+      .force('center', d3.forceCenter(width / 2, height / 2))
+      .force('collision', d3.forceCollide(40));
 
-    const link = svg.append('g')
-      .attr('stroke', '#94a3b8')
-      .attr('stroke-opacity', 0.6)
+    const link = g.append('g')
       .selectAll('line')
       .data(edges)
       .join('line')
-      .attr('stroke-width', 2);
+      .attr('stroke', 'rgba(0, 212, 255, 0.15)')
+      .attr('stroke-width', 1.5);
 
-    const node = svg.append('g')
-      .attr('stroke', '#fff')
-      .attr('stroke-width', 1.5)
+    // Pulse rings for critical nodes
+    const pulseRings = g.append('g')
       .selectAll('circle')
-      .data(nodes)
+      .data(nodes.filter((n: any) => (centrality?.[n.id] || 0) > 0.8))
       .join('circle')
-      .attr('r', (d: any) => 8 + (centrality?.[d.id] || 0) * 20)
-      .attr('fill', (d: any) => {
-        const c = centrality?.[d.id] || 0;
-        return d3.interpolateReds(c);
+      .attr('fill', 'none')
+      .attr('stroke-width', 1)
+      .attr('stroke', (d: any) => NODE_COLOR[d.type as keyof typeof NODE_COLOR] || '#00d4ff')
+      .style('animation', 'ring-pulse 2s ease-out infinite');
+
+    const node = g.append('g')
+      .selectAll('g.node-group')
+      .data(nodes)
+      .join('g')
+      .attr('class', 'node-group')
+      .style('cursor', 'pointer')
+      .on('click', (event, d: any) => {
+        if (onNodeClick) onNodeClick(d.id);
       })
-      .call(d3.drag<SVGCircleElement, any>()
+      .call(d3.drag<any, any>()
         .on('start', dragstarted)
         .on('drag', dragged)
         .on('end', dragended));
 
-    node.append('title').text((d: any) => `${d.id}\nCentrality: ${(centrality?.[d.id] || 0).toFixed(3)}`);
+    node.append('circle')
+      .attr('r', (d: any) => 10 + (centrality?.[d.id] || 0.3) * 10)
+      .attr('fill', (d: any) => (NODE_COLOR[d.type as keyof typeof NODE_COLOR] || '#00d4ff') + '22')
+      .attr('stroke', (d: any) => NODE_COLOR[d.type as keyof typeof NODE_COLOR] || '#00d4ff')
+      .attr('stroke-width', 2)
+      .style('filter', (d: any) => `drop-shadow(0 0 6px ${NODE_COLOR[d.type as keyof typeof NODE_COLOR] || '#00d4ff'})`);
 
-    const labels = svg.append('g')
-      .selectAll('text')
-      .data(nodes)
-      .join('text')
-      .text((d: any) => d.id)
-      .attr('font-size', '12px')
-      .attr('dx', 12)
-      .attr('dy', 4)
-      .attr('fill', '#1e293b');
+    node.append('text')
+      .attr('dy', '0.35em')
+      .attr('text-anchor', 'middle')
+      .attr('fill', '#fff')
+      .attr('font-family', 'Share Tech Mono')
+      .attr('font-size', '9px')
+      .style('pointer-events', 'none')
+      .text((d: any) => d.id);
+
+    node.append('text')
+      .attr('dy', '2.2em')
+      .attr('text-anchor', 'middle')
+      .attr('fill', 'rgba(200, 230, 255, 0.7)')
+      .attr('font-family', 'Rajdhani')
+      .attr('font-size', '10px')
+      .attr('font-weight', '600')
+      .style('pointer-events', 'none')
+      .text((d: any) => d.label?.split('-')[0] || d.id);
 
     simulation.on('tick', () => {
       link
@@ -70,13 +110,11 @@ export const NetworkGraph: React.FC<NetworkGraphProps> = ({ data, centrality }) 
         .attr('x2', (d: any) => d.target.x)
         .attr('y2', (d: any) => d.target.y);
 
-      node
+      node.attr('transform', (d: any) => `translate(${d.x},${d.y})`);
+      
+      pulseRings
         .attr('cx', (d: any) => d.x)
         .attr('cy', (d: any) => d.y);
-
-      labels
-        .attr('x', (d: any) => d.x)
-        .attr('y', (d: any) => d.y);
     });
 
     function dragstarted(event: any) {
@@ -97,19 +135,35 @@ export const NetworkGraph: React.FC<NetworkGraphProps> = ({ data, centrality }) 
     }
 
     return () => simulation.stop();
-  }, [data, centrality]);
+  }, [data, centrality, onNodeClick]);
 
   return (
-    <div className="w-full h-full bg-slate-50 rounded-xl border border-slate-200 overflow-hidden relative">
+    <div className="w-full h-full overflow-hidden relative">
       <svg ref={svgRef} className="w-full h-full" />
-      <div className="absolute bottom-4 left-4 bg-white/80 backdrop-blur p-2 rounded border border-slate-200 text-[10px] font-mono">
-        <div className="flex items-center gap-2">
-          <div className="w-3 h-3 rounded-full bg-red-500"></div>
-          <span>High Centrality</span>
+      
+      <style>{`
+        @keyframes ring-pulse {
+          0%   { r: 14; opacity: 0.8; }
+          100% { r: 30; opacity: 0; }
+        }
+      `}</style>
+
+      <div className="absolute bottom-6 left-6 flex flex-col gap-2">
+        <div className="flex items-center gap-2 glass px-3 py-1.5 rounded border border-[var(--border)] shadow-sm">
+          <div className="w-2 h-2 rounded-full bg-[var(--accent)] shadow-[0_0_6px_var(--accent)]"></div>
+          <span className="text-[9px] font-bold text-[var(--muted)] uppercase tracking-widest font-mono">Network Active</span>
         </div>
-        <div className="flex items-center gap-2 mt-1">
-          <div className="w-3 h-3 rounded-full bg-red-100 border border-slate-300"></div>
-          <span>Low Centrality</span>
+        
+        <div className="glass p-3 rounded border border-[var(--border)] shadow-sm space-y-2">
+          <div className="text-[9px] font-bold text-[var(--muted)] uppercase tracking-widest font-mono mb-1">Node Legend</div>
+          <div className="grid grid-cols-2 gap-x-4 gap-y-1.5">
+            {Object.entries(NODE_COLOR).map(([type, color]) => (
+              <div key={type} className="flex items-center gap-2">
+                <div className="w-2 h-2 rounded-full" style={{ backgroundColor: color, boxShadow: `0 0 4px ${color}` }} />
+                <span className="text-[9px] text-[var(--muted)] uppercase font-mono">{type}</span>
+              </div>
+            ))}
+          </div>
         </div>
       </div>
     </div>
