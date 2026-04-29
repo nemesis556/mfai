@@ -31,22 +31,30 @@ export interface AnalysisResult {
   laplacian: number[][];
   algebraicConnectivity: number;
   nodeMap: string[];
+  eigenvalues: number[];
+  degreeCentrality: Record<string, number>;
 }
 
 /**
  * Calculates the spectral radius (largest eigenvalue) using Power Iteration.
+ * Robust version for non-negative matrices (handles bipartite oscillations).
  */
-export function calculateSpectralRadius(matrix: number[][], iterations: number = 50): { radius: number; eigenvector: number[] } {
+export function calculateSpectralRadius(matrix: number[][], iterations: number = 100): { radius: number; eigenvector: number[] } {
   const n = matrix.length;
   if (n === 0) return { radius: 0, eigenvector: [] };
+  if (n === 1) return { radius: matrix[0][0], eigenvector: [1] };
 
-  let b_k = new Array(n).fill(0).map(() => Math.random());
+  // Use a shift A + I to ensure the largest eigenvalue is dominant (handles bipartite graphs)
+  // The eigenvectors of A and A+I are the same.
+  const shiftedMatrix = matrix.map((row, i) => row.map((val, j) => (i === j ? val + 1 : val)));
+
+  let b_k = new Array(n).fill(1 / Math.sqrt(n)); // Start with a uniform positive vector
   
   for (let i = 0; i < iterations; i++) {
     const b_k1 = new Array(n).fill(0);
     for (let row = 0; row < n; row++) {
       for (let col = 0; col < n; col++) {
-        b_k1[row] += matrix[row][col] * b_k[col];
+        b_k1[row] += shiftedMatrix[row][col] * b_k[col];
       }
     }
     const norm = Math.sqrt(b_k1.reduce((sum, val) => sum + val * val, 0));
@@ -54,6 +62,7 @@ export function calculateSpectralRadius(matrix: number[][], iterations: number =
     b_k = b_k1.map(val => val / norm);
   }
 
+  // Calculate actual radius for the ORIGINAL matrix A
   let radius = 0;
   const Ab_k = new Array(n).fill(0);
   for (let row = 0; row < n; row++) {
@@ -119,12 +128,50 @@ export function buildMatrices(data: NetworkData): { matrix: number[][]; laplacia
 
 export function performFullAnalysis(data: NetworkData): AnalysisResult {
   const { matrix, laplacian, nodeMap } = buildMatrices(data);
-  const { radius, eigenvector } = calculateSpectralRadius(matrix);
   const algebraicConnectivity = calculateAlgebraicConnectivity(laplacian);
+
+  let eigenvalues: number[] = [];
+  let eigenvector: number[] = [];
+  let radius = 0;
+
+  try {
+    const eig = (math as any).eigs(math.matrix(matrix));
+    const values = [...eig.values.toArray()];
+    eigenvalues = [...values].sort((a, b) => b - a);
+    
+    // Find absolute maximum eigenvalue for the radius
+    radius = Math.max(...values.map(v => Math.abs(v)));
+    
+    // Find the index of the principal eigenvalue to get its eigenvector
+    const principalIdx = values.findIndex(v => Math.abs(Math.abs(v) - radius) < 1e-10);
+    if (principalIdx !== -1) {
+      const vectorsArray = eig.vectors.toArray();
+      // mathjs returns eigenvectors as columns
+      eigenvector = vectorsArray.map((row: any[]) => {
+        const v = row[principalIdx];
+        return Math.abs(typeof v === 'number' ? v : (v.re || 0));
+      });
+    } else {
+      const res = calculateSpectralRadius(matrix);
+      radius = res.radius;
+      eigenvector = res.eigenvector;
+    }
+  } catch (e) {
+    const res = calculateSpectralRadius(matrix);
+    radius = res.radius;
+    eigenvector = res.eigenvector;
+    eigenvalues = [radius];
+  }
 
   const centrality: Record<string, number> = {};
   eigenvector.forEach((val, idx) => {
     centrality[nodeMap[idx]] = val;
+  });
+
+  const degreeCentrality: Record<string, number> = {};
+  nodeMap.forEach((id, idx) => {
+    const d = matrix[idx].reduce((a, b) => a + b, 0);
+    degreeCentrality[id] = d;
   });
 
   const sortedNodes = [...nodeMap].sort((a, b) => centrality[b] - centrality[a]);
@@ -146,7 +193,9 @@ export function performFullAnalysis(data: NetworkData): AnalysisResult {
     matrix,
     laplacian,
     algebraicConnectivity,
-    nodeMap
+    nodeMap,
+    eigenvalues,
+    degreeCentrality
   };
 }
 

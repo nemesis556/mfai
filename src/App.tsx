@@ -115,12 +115,11 @@ const NODE_COLOR = {
 
 export default function App() {
   const [network, setNetwork] = useState<NetworkData>(INITIAL_DATA);
-  const [history, setHistory] = useState<number[]>([3.5127]);
+  const [history, setHistory] = useState<number[]>([]);
   const [activeTab, setActiveTab] = useState<'graph' | 'spectral' | 'bayes' | 'logic' | 'gnn'>('graph');
   const [attackMode, setAttackMode] = useState<'random' | 'targeted' | 'cascade'>('random');
   const [logs, setLogs] = useState<{ msg: string; type: 'ok' | 'info' | 'warn' | 'err'; time: string }[]>([
-    { msg: 'Network loaded: 10 nodes, 17 edges', type: 'ok', time: new Date().toLocaleTimeString() },
-    { msg: 'Spectral radius ρ = 3.5127', type: 'info', time: new Date().toLocaleTimeString() }
+    { msg: 'Network loaded: 10 nodes, 17 edges', type: 'ok', time: new Date().toLocaleTimeString() }
   ]);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [snapshots, setSnapshots] = useState<{ id: string; name: string; data: NetworkData; rho: number }[]>([]);
@@ -176,7 +175,7 @@ export default function App() {
 
   const handleReset = () => {
     setNetwork(INITIAL_DATA);
-    setHistory([3.5127]);
+    setHistory([]);
     setSelectedNodeId(null);
     addLog('Network restored to original topology', 'ok');
   };
@@ -192,7 +191,6 @@ export default function App() {
       edges: [...prev.edges, ...newEdges.filter(ne => !prev.edges.some(e => (e.source === ne.source && e.target === ne.target) || (e.source === ne.target && e.target === ne.source)))]
     }));
     addLog('Optimization engine applied resilience paths', 'info');
-    addLog('Spectral radius projected ↑ 4.377', 'ok');
   };
 
   const handleAddNode = () => {
@@ -309,27 +307,60 @@ export default function App() {
   };
 
   const eigenvalueData = {
-    labels: [3.5127, -2.5890, -2.5100, 2.1360, -1.2330, 1.1010, -0.8450, 0.6230, -0.3110, 0.1180].map((_, i) => `λ${i+1}`),
+    labels: analysis.eigenvalues.map((v, i) => `λ${i+1} (${v.toFixed(2)})`),
     datasets: [{
       label: 'Eigenvalue',
-      data: [3.5127, -2.5890, -2.5100, 2.1360, -1.2330, 1.1010, -0.8450, 0.6230, -0.3110, 0.1180],
-      backgroundColor: [3.5127, -2.5890, -2.5100, 2.1360, -1.2330, 1.1010, -0.8450, 0.6230, -0.3110, 0.1180].map(v => v > 0 ? 'rgba(0, 212, 255, 0.5)' : 'rgba(255, 51, 85, 0.5)'),
-      borderColor: [3.5127, -2.5890, -2.5100, 2.1360, -1.2330, 1.1010, -0.8450, 0.6230, -0.3110, 0.1180].map(v => v > 0 ? '#00d4ff' : '#ff3355'),
+      data: analysis.eigenvalues,
+      backgroundColor: analysis.eigenvalues.map(v => v > 0 ? 'rgba(0, 212, 255, 0.5)' : 'rgba(255, 51, 85, 0.5)'),
+      borderColor: analysis.eigenvalues.map(v => v > 0 ? '#00d4ff' : '#ff3355'),
       borderWidth: 1,
       borderRadius: 2
     }]
   };
 
+  const degreeDist = useMemo(() => {
+    const counts: Record<string, number> = {};
+    Object.values(analysis.degreeCentrality).forEach(d => {
+      const val = String(d);
+      counts[val] = (counts[val] || 0) + 1;
+    });
+    const sortedDegrees = Object.keys(counts).map(Number).sort((a, b) => a - b);
+    return {
+      labels: sortedDegrees.map(d => `Degree ${d}`),
+      data: sortedDegrees.map(d => counts[d]),
+      colors: sortedDegrees.map(d => {
+        if (d <= 1) return { bg: 'rgba(0,255,136,0.4)', border: '#00ff88' };
+        if (d <= 3) return { bg: 'rgba(0,212,255,0.4)', border: '#00d4ff' };
+        return { bg: 'rgba(255,170,0,0.4)', border: '#ffaa00' };
+      })
+    };
+  }, [analysis.degreeCentrality]);
+
+  const attackImpacts = useMemo(() => {
+    // Show impact of removing top central nodes
+    const nodesToTest = [...network.nodes]
+      .sort((a, b) => (analysis.centrality[b.id] || 0) - (analysis.centrality[a.id] || 0))
+      .slice(0, 6);
+    return nodesToTest.map(node => {
+      const tempNetwork = {
+        nodes: network.nodes.filter(n => n.id !== node.id),
+        edges: network.edges.filter(e => e.source !== node.id && e.target !== node.id)
+      };
+      const result = performFullAnalysis(tempNetwork);
+      return { label: `−${node.label || node.id}`, value: result.spectralRadius };
+    });
+  }, [network]);
+
   const attackImpactData = {
-    labels: ['Original', '−Node 5', '−Node 3', '−Node 2', '−Node 6', '−Node 7'],
+    labels: ['Current', ...attackImpacts.map(i => i.label)],
     datasets: [{
       label: 'Spectral Radius ρ',
-      data: [3.5127, 2.9926, 2.7877, 2.7411, 2.3028, 1.4142],
+      data: [analysis.spectralRadius, ...attackImpacts.map(i => i.value)],
       borderColor: '#ff3355',
       backgroundColor: 'rgba(255, 51, 85, 0.1)',
       borderWidth: 2,
       pointBackgroundColor: '#ff3355',
-      pointRadius: 5,
+      pointRadius: 4,
       fill: true,
       tension: 0.3
     }]
@@ -551,7 +582,7 @@ export default function App() {
                           <div className="font-mono text-[11px] text-[var(--muted)] mb-3.5 uppercase">NODE {selectedNode.id} · {selectedNode.type?.toUpperCase()}</div>
                           <div className="space-y-0.5">
                             {[
-                              { label: 'Degree', value: network.edges.filter(e => e.source === selectedNode.id || e.target === selectedNode.id).length },
+                              { label: 'Degree', value: analysis.degreeCentrality[selectedNode.id] || 0 },
                               { label: 'Centrality', value: (analysis.centrality[selectedNode.id] || 0).toFixed(4) },
                               { label: 'PageRank', value: (analysis.centrality[selectedNode.id] * 0.12).toFixed(4) },
                               { label: 'P(Fail|Attack)', value: `${(calculateBayesianPosterior(selectedNode.id, network, analysis.centrality) * 100).toFixed(1)}%` },
@@ -769,7 +800,7 @@ export default function App() {
                         { label: 'Spectral Radius ρ', value: analysis.spectralRadius.toFixed(4), color: 'text-[var(--accent)]' },
                         { label: 'Algebraic Connectivity', value: analysis.algebraicConnectivity.toFixed(4), color: 'text-[var(--accent2)]' },
                         { label: 'Most Critical Node', value: `Node ${analysis.criticalNodes[0]}`, color: 'text-[var(--warn)]' },
-                        { label: 'P(Collapse | Targeted)', value: '95%', color: 'text-[var(--danger)]' },
+                        { label: 'P(Collapse | Targeted)', value: `${(analysis.collapseProbability * 100).toFixed(1)}%`, color: 'text-[var(--danger)]' },
                       ].map(metric => (
                         <div key={metric.label} className="bg-[var(--surface2)] border border-[var(--border)] rounded p-3.5 flex flex-col gap-1">
                           <div className={cn("font-mono text-[26px] drop-shadow-[0_0_15px_rgba(0,212,255,0.4)] leading-none", metric.color)}>{metric.value}</div>
@@ -835,12 +866,12 @@ export default function App() {
                     <div className="flex-1 min-h-0">
                       <Bar 
                         data={{
-                          labels: ['Degree 2', 'Degree 3', 'Degree 4'],
+                          labels: degreeDist.labels,
                           datasets: [{
                             label: 'Nodes',
-                            data: [1, 4, 5],
-                            backgroundColor: ['rgba(0,255,136,0.4)', 'rgba(0,212,255,0.4)', 'rgba(255,170,0,0.4)'],
-                            borderColor: ['#00ff88', '#00d4ff', '#ffaa00'],
+                            data: degreeDist.data,
+                            backgroundColor: degreeDist.colors.map(c => c.bg),
+                            borderColor: degreeDist.colors.map(c => c.border),
                             borderWidth: 1,
                             borderRadius: 4
                           }]
@@ -1169,13 +1200,17 @@ export default function App() {
                     <div className="bg-[var(--surface2)] border border-[var(--border)] rounded p-4">
                       <div className="text-[10px] tracking-[2px] text-[var(--muted)] uppercase mb-3 font-mono">Node Vulnerability Ranking</div>
                       <div className="space-y-2.5">
-                        {network.nodes.slice(0, 6).map((n, i) => {
-                          const r = calculateGNNRiskScore(n.id, network, analysis.centrality, analysis.collapseProbability);
-                          const color = NODE_COLOR[n.type as keyof typeof NODE_COLOR] || 'var(--accent)';
-                          const fill = r > 0.75 ? 'var(--danger)' : r > 0.5 ? 'var(--warn)' : 'var(--accent2)';
-                          return (
-                            <div key={n.id} className="flex items-center gap-3 py-1 border-b border-[var(--border)]/50 last:border-0">
-                              <div className="font-mono text-[11px] text-[var(--muted)] w-5">#{i+1}</div>
+                        {[...network.nodes]
+                          .map(n => ({ ...n, risk: calculateGNNRiskScore(n.id, network, analysis.centrality, analysis.collapseProbability) }))
+                          .sort((a, b) => b.risk - a.risk)
+                          .slice(0, 6)
+                          .map((n, i) => {
+                            const r = n.risk;
+                            const color = NODE_COLOR[n.type as keyof typeof NODE_COLOR] || 'var(--accent)';
+                            const fill = r > 0.75 ? 'var(--danger)' : r > 0.5 ? 'var(--warn)' : 'var(--accent2)';
+                            return (
+                              <div key={n.id} className="flex items-center gap-3 py-1 border-b border-[var(--border)]/50 last:border-0">
+                                <div className="font-mono text-[11px] text-[var(--muted)] w-5">#{i+1}</div>
                               <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: color, boxShadow: `0 0 6px ${color}` }} />
                               <div className="flex-1 font-semibold text-sm">{n.label || n.id}</div>
                               <div className="w-[120px]">
@@ -1203,7 +1238,7 @@ export default function App() {
                           data={{
                             labels: network.nodes.map(n => n.label || n.id),
                             datasets: [
-                              { label: 'Degree', data: network.nodes.map(n => network.edges.filter(e => e.source === n.id || e.target === n.id).length / 4), backgroundColor: 'rgba(0, 212, 255, 0.5)', borderRadius: 2 },
+                              { label: 'Degree', data: network.nodes.map(n => (analysis.degreeCentrality[n.id] || 0) / 4), backgroundColor: 'rgba(0, 212, 255, 0.5)', borderRadius: 2 },
                               { label: 'Centrality', data: network.nodes.map(n => analysis.centrality[n.id] || 0), backgroundColor: 'rgba(0, 255, 136, 0.4)', borderRadius: 2 },
                               { label: 'P(Fail)', data: network.nodes.map(n => calculateBayesianPosterior(n.id, network, analysis.centrality)), backgroundColor: 'rgba(255, 51, 85, 0.4)', borderRadius: 2 }
                             ]
