@@ -98,12 +98,11 @@ const INITIAL_DATA: NetworkData = {
 };
 
 const TEAM = [
-  { name: 'Alice Johnson', role: 'Spectral Analysis Lead', resp: 'Eigenvalue computation, adjacency matrix, spectral radius & eigenvector centrality' },
-  { name: 'Bob Chen', role: 'Logic & Inference Engineer', resp: 'FOL rules, forward/backward chaining engine, propositional (P∧Q)→R module' },
-  { name: 'Sara Patel', role: 'Bayesian Reasoning', resp: 'CPT design, posterior updates, P(Collapse|Attack) and uncertainty modeling' },
-  { name: 'Omar Farooq', role: 'GNN Architect', resp: '2-layer GNN, feature engineering, BCE training and vulnerability prediction' },
-  { name: 'Priya Singh', role: 'Optimization & UI', resp: 'Edge suggestion engine, attack simulation, visualization and frontend' },
-  { name: 'James Liu', role: 'Network Topology', resp: 'Dataset curation, graph construction, attack scenario design and resilience' },
+  { name: 'Krish Deshpande', role: 'Team Member' },
+  { name: 'Krishna Masane', role: 'Team Member' },
+  { name: 'Niraj Khumkar', role: 'Team Member' },
+  { name: 'Jaideep Khandagle', role: 'Team Member' },
+  { name: 'Manthan Khandelwal', role: 'Team Member' },
 ];
 
 const NODE_COLOR = {
@@ -207,25 +206,33 @@ export default function App() {
     setNewNodeLabel('');
   };
 
-  const handleAddEdge = () => {
-    const parts = inputEdge.split(/\s+/).filter(Boolean);
-    if (parts.length === 2) {
-      const [u, v] = parts;
-      if (!network.nodes.find(n => n.id === u) || !network.nodes.find(n => n.id === v)) {
-        addLog('Invalid node IDs for connection', 'err');
+  const handleAddEdge = (u?: string, v?: string) => {
+    let source = u;
+    let target = v;
+
+    if (!source || !target) {
+      const parts = inputEdge.split(/\s+/).filter(Boolean);
+      if (parts.length === 2) {
+        [source, target] = parts;
+      } else {
         return;
       }
-      if (network.edges.some(e => (e.source === u && e.target === v) || (e.source === v && e.target === u))) {
-        addLog('Edge already exists', 'warn');
-        return;
-      }
-      setNetwork(prev => ({
-        ...prev,
-        edges: [...prev.edges, { source: u, target: v }]
-      }));
-      addLog(`Added connection: ${u} ↔ ${v}`, 'ok');
-      setInputEdge('');
     }
+
+    if (!network.nodes.find(n => n.id === source) || !network.nodes.find(n => n.id === target)) {
+      addLog('Invalid node IDs for connection', 'err');
+      return;
+    }
+    if (network.edges.some(e => (e.source === source && e.target === target) || (e.source === target && e.target === source))) {
+      addLog('Edge already exists', 'warn');
+      return;
+    }
+    setNetwork(prev => ({
+      ...prev,
+      edges: [...prev.edges, { source: source!, target: target! }]
+    }));
+    addLog(`Added connection: ${source} ↔ ${target}`, 'ok');
+    setInputEdge('');
   };
 
   const handleDeleteNode = (id: string) => {
@@ -532,6 +539,7 @@ export default function App() {
                       data={network} 
                       centrality={analysis.centrality} 
                       onNodeClick={(id) => setSelectedNodeId(id)}
+                      onAddEdge={(u, v) => handleAddEdge(u, v)}
                     />
                   </div>
                   <div className="w-[280px] border-l border-[var(--border)] bg-[var(--surface)]/95 p-5 overflow-y-auto flex flex-col gap-4 shrink-0">
@@ -554,7 +562,40 @@ export default function App() {
                               </div>
                             ))}
                           </div>
-                          <div className="mt-3 flex gap-2">
+                          
+                          {/* Math Derivation Section */}
+                          <div className="mt-4 pt-4 border-t border-[var(--border)]/50">
+                            <details className="group">
+                              <summary className="text-[10px] tracking-[2px] text-[var(--accent)] uppercase cursor-pointer hover:text-white transition-colors flex items-center gap-2 list-none font-mono">
+                                <ChevronRight size={10} className="group-open:rotate-90 transition-transform" />
+                                View Math Derivation
+                              </summary>
+                              <div className="mt-3 space-y-4 bg-black/20 rounded p-3 text-[11px] font-mono leading-relaxed">
+                                <div>
+                                  <p className="text-[var(--muted)] mb-1 uppercase text-[9px] font-bold">1. Bayesian Posterior</p>
+                                  <div className="space-y-1 text-[var(--text)]/80">
+                                    <p>Prior = 0.05 + 0.35 × (min({network.edges.filter(e => e.source === selectedNode.id || e.target === selectedNode.id).length}, 4)/4)</p>
+                                    <p>Prior = <span className="text-[var(--accent2)]">{(0.05 + 0.35 * (Math.min(network.edges.filter(e => e.source === selectedNode.id || e.target === selectedNode.id).length, 4) / 4)).toFixed(3)}</span></p>
+                                    <p>Likelihood = 1 + ({(analysis.centrality[selectedNode.id] || 0).toFixed(4)} × 2) = <span className="text-[var(--accent2)]">{(1 + (analysis.centrality[selectedNode.id] || 0) * 2).toFixed(3)}</span></p>
+                                    <p className="text-[var(--accent)] mt-1">P(Fail) = (Prior × L) / (Prior × L + (1 - Prior))</p>
+                                    <p className="text-[var(--accent)]">P(Fail) = <span className="font-bold">{(calculateBayesianPosterior(selectedNode.id, network, analysis.centrality) * 100).toFixed(2)}%</span></p>
+                                  </div>
+                                </div>
+                                
+                                <div className="pt-2 border-t border-white/5">
+                                  <p className="text-[var(--muted)] mb-1 uppercase text-[9px] font-bold">2. GNN Risk Score</p>
+                                  <div className="space-y-1 text-[var(--text)]/80">
+                                    <p>S = 0.88 + (0.27c + 0.20d + 0.12pr + 0.21f) × 0.065</p>
+                                    <p className="text-[var(--muted)] italic opacity-60 text-[9px]">c=centrality, d=degree, pr=collapse, f=posterior</p>
+                                    <p>S = 0.88 + (0.27×{(analysis.centrality[selectedNode.id] || 0).toFixed(3)} + 0.20×{(Math.min(network.edges.filter(e => e.source === selectedNode.id || e.target === selectedNode.id).length, 4) / 4).toFixed(2)} + 0.12×{analysis.collapseProbability.toFixed(2)} + 0.21×{calculateBayesianPosterior(selectedNode.id, network, analysis.centrality).toFixed(3)}) × 0.065</p>
+                                    <p className="text-[var(--danger)] font-bold mt-1">Risk = {(calculateGNNRiskScore(selectedNode.id, network, analysis.centrality, analysis.collapseProbability) * 100).toFixed(2)}%</p>
+                                  </div>
+                                </div>
+                              </div>
+                            </details>
+                          </div>
+
+                          <div className="mt-4 flex gap-2">
                             <div className="flex-1">
                               <div className="flex justify-between text-[11px] text-[var(--muted)] mb-1">
                                 <span>GNN Risk Score</span>
@@ -1194,11 +1235,10 @@ export default function App() {
                   <div className="grid grid-cols-2 gap-4">
                     {TEAM.map((m, i) => (
                       <div key={i} className="bg-[var(--surface2)] border border-[var(--border)] rounded p-4 fade-in" style={{ animationDelay: `${i * 0.08}s` }}>
-                        <div className="flex justify-between items-center mb-2">
-                          <div className="text-lg font-bold text-white">{m.name}</div>
-                          <div className="text-[10px] font-bold text-[var(--accent)] uppercase tracking-widest font-mono">{m.role}</div>
+                        <div className="flex justify-between items-center whitespace-nowrap overflow-hidden">
+                          <div className="text-lg font-bold text-white truncate mr-2">{m.name}</div>
+                          <div className="text-[10px] font-bold text-[var(--accent)] uppercase tracking-widest font-mono shrink-0">{m.role}</div>
                         </div>
-                        <div className="text-[13px] text-[var(--muted)] leading-relaxed">{m.resp}</div>
                       </div>
                     ))}
                   </div>
